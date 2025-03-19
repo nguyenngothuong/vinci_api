@@ -70,6 +70,7 @@
       "region": "Trung",
       "carrier_id": ["recuEKSQPi4MAQ"],
       "carrier_name": "Hải Mạnh",
+      "export_document_link": "https://storage.googleapis.com/html2pdf-129831293812-4/PG-495-A Trọng ĐN-20250219-1739960595001-vinci-group.pdf",
       "order_details": [
         {
           "product_id": "recmVEazL4",
@@ -117,6 +118,7 @@
 - **region**: Khu vực (Bắc, Trung, Nam)
 - **carrier_id**: ID vận chuyển
 - **carrier_name**: Tên vận chuyển
+- **export_document_link**: Link đến phiếu xuất kho (PDF)
 
 ### Thông tin chi tiết đơn hàng (order_details)
 - **product_id**: ID sản phẩm
@@ -244,4 +246,5 @@ print(json.dumps(response.json(), indent=2, ensure_ascii=False))
 2. Nên xử lý lỗi và retry trong trường hợp mạng không ổn định
 3. Dữ liệu trả về đã được xử lý và làm sạch, không cần phân trang
 4. Các trường dữ liệu có thể thay đổi tùy theo cấu hình hệ thống
-5. Khi làm việc với trường ngày tháng, sử dụng timestamp dạng milliseconds (Unix epoch time) 
+5. Khi làm việc với trường ngày tháng, sử dụng timestamp dạng milliseconds (Unix epoch time)
+6. Trường export_document_link có thể null nếu đơn hàng chưa có phiếu xuất kho 
