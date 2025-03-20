@@ -5,7 +5,7 @@ Tài liệu API cho hệ thống Vinci.
 ## Cấu trúc tài liệu
 
 - [API Đơn Hàng V2](./docs/orders/v2/orders.md)
-- [API Cập Nhật Trạng Thái Đơn Hàng V2](./docs/orders/v2/update-status.md) (⚠️ Đang sửa lỗi - Vui lòng sử dụng API V1)
+- [API Cập Nhật Trạng Thái Đơn Hàng V2](./docs/orders/v2/update-status.md)
 - [API Chi Tiết Đơn Hàng V1](./docs/orders/v1/order-details.md)
 - [API Đơn Hàng V1](./docs/orders/v1/orders.md)
 
@@ -21,6 +21,7 @@ Tài liệu API cho hệ thống Vinci.
 - Kết hợp API đơn hàng và chi tiết đơn hàng
 - Trả về toàn bộ dữ liệu trong một lần gọi
 - Không cần phân trang
+- Hỗ trợ cập nhật trạng thái đơn hàng hàng loạt
 
 ### V1
 - API đơn hàng và chi tiết đơn hàng riêng biệt
@@ -29,7 +30,11 @@ Tài liệu API cho hệ thống Vinci.
 
 ## Thông báo quan trọng
 
-⚠️ **API Cập Nhật Trạng Thái Đơn Hàng V2 đang được sửa lỗi**
-- Flow cập nhật trạng thái đơn hàng V2 đang được sửa lỗi và tối ưu
-- Vui lòng tiếp tục sử dụng API V1 cho đến khi có thông báo mới
-- Dự kiến hoàn thành sửa lỗi: 22/03/2024 
+✅ **API Cập Nhật Trạng Thái Đơn Hàng V2 đã sẵn sàng sử dụng**
+- Flow cập nhật trạng thái đơn hàng V2 đã được cải tiến và tối ưu hóa
+- Hỗ trợ cập nhật hàng loạt với giới hạn tối đa 100 đơn hàng mỗi request
+- Các cải tiến:
+  - Xử lý batch tự động cho mỗi 50 đơn hàng
+  - Trả về thông tin chi tiết về các đơn đã cập nhật và chưa cập nhật
+  - Log chi tiết để dễ dàng debug
+- Ngày cập nhật: 25/03/2024 

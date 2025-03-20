@@ -1,0 +1,265 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "/**\n * Validate Batch Update Input\n * --------------------------------\n * Kiểm tra và xác thực dữ liệu đầu vào cho API cập nhật hàng loạt trạng thái đơn hàng\n * Trả về mảng filters, mỗi filter chứa tối đa 50 order_code\n *\n * Input: Object chứa dữ liệu cập nhật từ người dùng\n * Output: Mảng các filter objects để batch search\n */\n\n// Lấy tất cả input từ node trước đó\nconst items = $input.all();\nconsole.log('Input items: ', items.length);\n\n// Danh sách các trạng thái đơn hàng hợp lệ\nconst VALID_STATUSES = [\n  'Nhận đơn',\n  'Xử lý',\n  'Đã giao',\n  'Đã huỷ',\n  'Đang giao',\n  'Xuất kho',\n];\n\n// Xử lý mỗi input item\nconst results = [];\n\nfor (const item of items) {\n  const inputData = item.json;\n  \n  // Log input để debug\n  console.log('Processing input:', JSON.stringify(inputData.params || inputData.body || inputData).slice(0, 200) + '...');\n  \n  // Khởi tạo response\n  const response = {\n    success: true,\n    message: 'Dữ liệu hợp lệ',\n    data: {\n      app_token: \"GfbhbWshba8es4s8wQQuq65hspe\",\n      table_id: \"tblaDDCyz7suvc4N\"\n    },\n    errors: [],\n    filters: [] // Mảng chứa các filters\n  };\n\n  try {\n    // Kết hợp query parameters và body để xử lý\n    const queryParams = inputData.query || inputData.params || {};\n    const bodyData = inputData.body || inputData; // Nếu không có inputData.body, sử dụng inputData trực tiếp\n\n    // 1. Kiểm tra và trích xuất danh sách đơn hàng\n    if (!bodyData.orders) {\n      response.errors.push('Thiếu danh sách đơn hàng (orders)');\n    } else if (!Array.isArray(bodyData.orders)) {\n      response.errors.push('orders phải là một mảng');\n    } else if (bodyData.orders.length === 0) {\n      response.errors.push('Danh sách đơn hàng không được để trống');\n    } else {\n      // Mảng chứa các đơn hàng đã được xác thực\n      const validatedOrders = [];\n\n      // Kiểm tra từng đơn hàng trong danh sách\n      bodyData.orders.forEach((order, index) => {\n        const orderErrors = [];\n\n        // Kiểm tra order_code\n        if (!order.order_code) {\n          orderErrors.push(`orders[${index}]: Thiếu order_code`);\n        } else if (typeof order.order_code !== 'string') {\n          orderErrors.push(`orders[${index}]: order_code phải là chuỗi`);\n        } else if (!order.order_code.startsWith('DH')) {\n          orderErrors.push(`orders[${index}]: order_code phải bắt đầu bằng \"DH\"`);\n        }\n\n        // Kiểm tra status\n        if (!order.status) {\n          orderErrors.push(`orders[${index}]: Thiếu status`);\n        } else if (typeof order.status !== 'string') {\n          orderErrors.push(`orders[${index}]: status phải là chuỗi`);\n        } else if (!VALID_STATUSES.includes(order.status)) {\n          orderErrors.push(`orders[${index}]: status không hợp lệ. Các giá trị hợp lệ: ${VALID_STATUSES.join(', ')}`);\n        }\n\n        // Nếu không có lỗi, thêm vào danh sách đơn hàng hợp lệ\n        if (orderErrors.length === 0) {\n          validatedOrders.push({\n            order_code: order.order_code,\n            status: order.status,\n          });\n        } else {\n          // Thêm các lỗi vào danh sách lỗi chung\n          response.errors = [...response.errors, ...orderErrors];\n        }\n      });\n\n      // Lưu danh sách đơn hàng đã được xác thực\n      response.data.orders = validatedOrders;\n    }\n\n    // 2. Kiểm tra số lượng đơn hàng hợp lệ\n    if (response.data.orders && response.data.orders.length === 0) {\n      response.errors.push('Không có đơn hàng nào hợp lệ để cập nhật');\n    }\n\n    // 3. Kiểm tra số lượng đơn hàng tối đa\n    if (response.data.orders && response.data.orders.length > 100) {\n      response.errors.push('Số lượng đơn hàng vượt quá giới hạn (tối đa 100 đơn hàng mỗi lần cập nhật)');\n    }\n\n    // 4. Kiểm tra trùng lặp order_code\n    if (response.data.orders && response.data.orders.length > 0) {\n      const orderCodes = response.data.orders.map((order) => order.order_code);\n      const uniqueOrderCodes = [...new Set(orderCodes)];\n\n      if (orderCodes.length !== uniqueOrderCodes.length) {\n        response.errors.push('Có mã đơn hàng bị trùng lặp trong danh sách');\n\n        // Tìm các mã đơn hàng bị trùng lặp\n        const duplicates = orderCodes.filter(\n          (item, index) => orderCodes.indexOf(item) !== index\n        );\n        response.errors.push(\n          `Các mã đơn hàng bị trùng: ${[...new Set(duplicates)].join(', ')}`\n        );\n      }\n    }\n\n    // Cập nhật trạng thái success dựa trên số lượng lỗi\n    if (response.errors.length > 0) {\n      response.success = false;\n      response.message = 'Dữ liệu không hợp lệ';\n    } else {\n      // Thêm thông tin tổng hợp\n      response.data.total = response.data.orders.length;\n      response.message = `Dữ liệu hợp lệ. Sẵn sàng cập nhật ${response.data.total} đơn hàng.`;\n\n      // 5. Tạo filter để tìm đơn hàng trong Larkbase\n      // Phân chia danh sách order codes thành các lô, mỗi lô tối đa 50 codes\n      const MAX_CONDITIONS = 50;\n      const orderCodes = response.data.orders.map(order => order.order_code);\n      const batches = [];\n\n      for (let i = 0; i < orderCodes.length; i += MAX_CONDITIONS) {\n        const batch = orderCodes.slice(i, i + MAX_CONDITIONS);\n        batches.push(batch);\n      }\n\n      // Tạo filters cho mỗi batch\n      batches.forEach(batch => {\n        // Tạo conditions cho batch này\n        const conditions = batch.map(code => ({\n          value: [code],\n          operator: \"is\",\n          field_name: \"order_code\"\n        }));\n        \n        // Thêm filter mới vào danh sách\n        response.filters.push({\n          success: true,\n          message: \"Dữ liệu hợp lệ\",\n          data: {\n            filter: {\n              conjunction: \"or\",\n              conditions: conditions\n            },\n            sort: [\n              {\n                field_name: \"Ngày xuất\",\n                order: \"desc\"\n              }\n            ]\n          },\n          errors: []\n        });\n      });\n      \n      // Thêm thông tin số lượng filters để dễ theo dõi\n      if (response.filters.length > 0) {\n        response.data.batches = response.filters.length;\n      }\n    }\n  } catch (error) {\n    response.success = false;\n    response.message = 'Lỗi xử lý dữ liệu';\n    response.errors.push(error.message);\n  }\n\n  // Thêm kết quả vào mảng\n  if (response.filters.length > 0) {\n    // Tạo mảng kết quả theo định dạng yêu cầu\n    response.filters.forEach(filter => {\n      results.push({\n        json: filter\n      });\n    });\n  } else {\n    // Nếu không có filter nào (có lỗi hoặc dữ liệu rỗng), trả về response gốc\n    results.push({\n      json: {\n        success: response.success,\n        message: response.message,\n        data: {},\n        errors: response.errors\n      }\n    });\n  }\n}\n\n// Log kết quả để debug\nconsole.log(`Đã tạo ${results.length} filter batches`);\n\n// Trả về kết quả xử lý\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        2000
+      ],
+      "id": "a7f4c115-1513-48a5-b54f-5fcc1f1f6690",
+      "name": "validate_batch_update"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://open.larksuite.com/open-apis/bitable/v1/apps/{{ $('validate_batch_update').item.json.data.app_token || 'GfbhbWshba8es4s8wQQuq65hspe' }}/tables/{{ $('validate_batch_update').item.json.data.tbl_id_order || 'tblaDDCyz7suvc4N' }}/records/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ \"Bearer \" + $('get_token2').first().json.app_access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('validate_batch_update').item.json.data }}",
+        "options": {
+          "pagination": {
+            "pagination": {
+              "parameters": {
+                "parameters": [
+                  {
+                    "name": "page_token",
+                    "value": "={{ $response ? $response.body.data.page_token : '' }}"
+                  }
+                ]
+              },
+              "paginationCompleteWhen": "other",
+              "completeExpression": "={{ !$response.body.data.has_more }}"
+            }
+          }
+        }
+      },
+      "id": "baedda74-b9d9-4807-94a8-d8957d51a3ca",
+      "name": "search_records",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        280,
+        2000
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Prepare Batch Update\n * --------------------------------\n * Chuẩn bị dữ liệu cho việc cập nhật hàng loạt trạng thái đơn hàng\n *\n * Input: \n * - Dữ liệu từ search_records: thông tin về các bản ghi đã tìm được\n * - Dữ liệu từ webhook2 hoặc validate_batch_update: thông tin orders cần cập nhật trạng thái\n * \n * Output: Object chứa records để thực hiện batch update\n */\n\n// Lấy tất cả input từ các node trước đó\nconst searchRecordsData = $input.all();\nconst webhookData = $('webhook2').first().json || {};\n\n// Log để debug\nconsole.log('STEP 1: Thu thập dữ liệu đầu vào');\nconsole.log('Search Records Data length:', searchRecordsData.length);\nconsole.log('Webhook Data:', JSON.stringify(webhookData).slice(0, 200) + '...');\n\n// =========================================================================\n// STEP 2: Tổng hợp và làm sạch records từ searchRecordsData\n// =========================================================================\nconsole.log('\\nSTEP 2: Tổng hợp và làm sạch records');\n\n// Tổng hợp tất cả các records từ searchRecordsData\nlet rawRecords = [];\nsearchRecordsData.forEach((item, index) => {\n  if (item.json && item.json.code === 0 && item.json.data && Array.isArray(item.json.data.items)) {\n    console.log(`Response ${index + 1}: Tìm thấy ${item.json.data.items.length} records`);\n    rawRecords = rawRecords.concat(item.json.data.items);\n  }\n});\n\nconsole.log(`Tổng số raw records: ${rawRecords.length}`);\n\n// Hàm trích xuất giá trị text từ cấu trúc phức tạp của Larkbase\nfunction extractTextValue(field) {\n  if (!field) return null;\n  \n  // Nếu là cấu trúc {type: 1, value: [{text: \"...\", type: \"text\"}]}\n  if (field && field.type === 1 && Array.isArray(field.value) && field.value.length > 0 && field.value[0].text) {\n    return field.value[0].text;\n  }\n  \n  // Nếu đã là string đơn giản\n  if (typeof field === 'string') {\n    return field;\n  }\n  \n  return null;\n}\n\n// Làm sạch records để dễ xử lý\nfunction cleanRecords(rawRecords) {\n  const cleanedRecords = [];\n  \n  rawRecords.forEach((record, index) => {\n    if (!record || !record.fields) return;\n    \n    const orderCodeField = record.fields.order_code;\n    const orderCode = extractTextValue(orderCodeField);\n    const recordId = record.record_id;\n    const currentStatus = record.fields[\"Trạng thái đơn\"];\n    \n    if (orderCode && recordId) {\n      cleanedRecords.push({\n        order_code: orderCode,\n        record_id: recordId,\n        current_status: currentStatus\n      });\n      \n      console.log(`Record ${index + 1}: ${orderCode} -> ${recordId} (${currentStatus || 'không có status'})`);\n    } else {\n      console.log(`Record ${index + 1}: Không tìm thấy order_code hoặc record_id, fields:`, JSON.stringify(record.fields));\n    }\n  });\n  \n  return cleanedRecords;\n}\n\n// Làm sạch records\nconst cleanedRecords = cleanRecords(rawRecords);\nconsole.log(`Số records đã làm sạch: ${cleanedRecords.length}`);\n\n// Tạo map để tìm kiếm nhanh theo order_code\nconst orderCodeMap = {};\ncleanedRecords.forEach(record => {\n  orderCodeMap[record.order_code] = {\n    record_id: record.record_id,\n    current_status: record.current_status\n  };\n});\n\nconsole.log('Order Code Map:', JSON.stringify(orderCodeMap));\n\n// =========================================================================\n// STEP 3: Xử lý danh sách orders cần cập nhật từ Webhook\n// =========================================================================\nconsole.log('\\nSTEP 3: Xử lý danh sách orders cần cập nhật');\n\n// Lấy danh sách orders cần cập nhật từ Webhook hoặc validate_batch_update\n// Kiểm tra nhiều cấu trúc phổ biến \nlet ordersToUpdate = [];\n\nif (webhookData.body && Array.isArray(webhookData.body.orders)) {\n  // Cấu trúc webhook.body.orders\n  ordersToUpdate = webhookData.body.orders;\n  console.log('Lấy orders từ webhook.body.orders');\n} else if (webhookData.body && webhookData.body.data && Array.isArray(webhookData.body.data.orders)) {\n  // Cấu trúc webhook.body.data.orders\n  ordersToUpdate = webhookData.body.data.orders;\n  console.log('Lấy orders từ webhook.body.data.orders');\n} else if (webhookData.orders && Array.isArray(webhookData.orders)) {\n  // Cấu trúc webhook.orders\n  ordersToUpdate = webhookData.orders;\n  console.log('Lấy orders từ webhook.orders');\n} else {\n  console.log('Không tìm thấy cấu trúc orders, thử tìm trực tiếp:', JSON.stringify(webhookData));\n  \n  // Cố gắng tìm kiếm trực tiếp trong webhook data\n  for (const key in webhookData) {\n    if (typeof webhookData[key] === 'object' && webhookData[key] !== null) {\n      // Nếu là object, kiểm tra xem có chứa orders không\n      if (Array.isArray(webhookData[key].orders)) {\n        ordersToUpdate = webhookData[key].orders;\n        console.log(`Tìm thấy orders trong webhookData.${key}.orders`);\n        break;\n      } else if (webhookData[key].body && Array.isArray(webhookData[key].body.orders)) {\n        ordersToUpdate = webhookData[key].body.orders;\n        console.log(`Tìm thấy orders trong webhookData.${key}.body.orders`);\n        break;\n      }\n    }\n  }\n}\n\n// Log toàn bộ webhook data nếu vẫn không tìm thấy\nif (ordersToUpdate.length === 0) {\n  console.log('Không tìm thấy orders trong webhook, full data:', JSON.stringify(webhookData));\n  \n  // Thử lấy từ Webhook raw\n  const rawWebhook = $('webhook2').raw;\n  if (rawWebhook) {\n    console.log('Raw webhook:', JSON.stringify(rawWebhook).slice(0, 200) + '...');\n    // Thử một cấu trúc khác\n    if (rawWebhook.body && typeof rawWebhook.body === 'string') {\n      try {\n        const parsedBody = JSON.parse(rawWebhook.body);\n        if (Array.isArray(parsedBody.orders)) {\n          ordersToUpdate = parsedBody.orders;\n          console.log('Lấy orders từ JSON.parse(rawWebhook.body).orders');\n        }\n      } catch (e) {\n        console.log('Lỗi parse webhook body:', e.message);\n      }\n    }\n  }\n}\n\nconsole.log(`Cần cập nhật ${ordersToUpdate.length} orders`);\nconsole.log('Orders cần cập nhật:', JSON.stringify(ordersToUpdate));\n\n// =========================================================================\n// STEP 4: Chuẩn bị records để cập nhật\n// =========================================================================\nconsole.log('\\nSTEP 4: Chuẩn bị records để cập nhật');\n\n// Tạo danh sách records để cập nhật\nconst recordsToUpdate = [];\nconst statusChanges = [];\nconst notFoundOrders = [];\n\n// Duyệt qua danh sách orders cần cập nhật\nordersToUpdate.forEach((order, index) => {\n  const orderCode = order.order_code;\n  const newStatus = order.status;\n  \n  if (!orderCode || !newStatus) {\n    console.log(`Order ${index + 1}: Thiếu order_code hoặc status, data:`, JSON.stringify(order));\n    return;\n  }\n  \n  console.log(`Order ${index + 1}: ${orderCode} -> ${newStatus}`);\n  \n  if (orderCodeMap[orderCode]) {\n    const recordInfo = orderCodeMap[orderCode];\n    \n    // Tạo record để cập nhật\n    recordsToUpdate.push({\n      record_id: recordInfo.record_id,\n      fields: {\n        \"Trạng thái đơn\": newStatus\n      }\n    });\n    \n    console.log(`  ✓ Tìm thấy: record_id = ${recordInfo.record_id}`);\n    \n    // Lưu lại thông tin thay đổi trạng thái\n    if (recordInfo.current_status !== newStatus) {\n      statusChanges.push({\n        order_code: orderCode,\n        record_id: recordInfo.record_id,\n        previous_status: recordInfo.current_status,\n        new_status: newStatus\n      });\n      console.log(`  ↻ Thay đổi trạng thái: ${recordInfo.current_status || 'N/A'} -> ${newStatus}`);\n    } else {\n      console.log(`  = Giữ nguyên trạng thái: ${newStatus}`);\n    }\n  } else {\n    notFoundOrders.push(orderCode);\n    console.log(`  ✗ Không tìm thấy order_code: ${orderCode}`);\n  }\n});\n\nconsole.log(`\\nKết quả xử lý:`);\nconsole.log(`- Đã chuẩn bị ${recordsToUpdate.length} records để cập nhật`);\nconsole.log(`- Có ${statusChanges.length} thay đổi trạng thái`);\nconsole.log(`- Có ${notFoundOrders.length} orders không tìm thấy: ${notFoundOrders.join(', ')}`);\n\n// Tạo kết quả trả về\nconst result = {\n  success: recordsToUpdate.length > 0,\n  message: recordsToUpdate.length > 0 \n    ? `Đã chuẩn bị ${recordsToUpdate.length} records để cập nhật`\n    : 'Không tìm thấy records phù hợp để cập nhật',\n  data: {\n    records: recordsToUpdate,\n    status_changes: statusChanges,\n    order_code_map: orderCodeMap // Thêm map vào kết quả để debug\n  },\n  stats: {\n    total: ordersToUpdate.length,\n    matched: recordsToUpdate.length,\n    unmatched: notFoundOrders.length\n  },\n  errors: notFoundOrders.map(code => `Không tìm thấy đơn hàng có mã: ${code}`)\n};\n\n// Log kết quả cuối cùng\nconsole.log('\\nSTEP 5: Tạo kết quả trả về');\nconsole.log('Success:', result.success);\nconsole.log('Message:', result.message);\nconsole.log('Records to update:', result.data.records.length);\nconsole.log('Status changes:', result.data.status_changes.length);\n\n// Trả về kết quả\nreturn {\n  json: result\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        2280
+      ],
+      "id": "c1715b3b-05ac-4250-951a-543ce9075d0e",
+      "name": "prepare_batch_update"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://open.larksuite.com/open-apis/bitable/v1/apps/{{ $('validate_batch_update').item.json.data.app_token || 'GfbhbWshba8es4s8wQQuq65hspe' }}/tables/{{ $('validate_batch_update').item.json.data.table_id || 'tblaDDCyz7suvc4N' }}/records/batch_update",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ \"Bearer \" + $('get_token2').first().json.app_access_token }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('prepare_batch_update').item.json.data }}",
+        "options": {}
+      },
+      "id": "90693cfa-c2b6-4330-b7af-cbddefac7cc5",
+      "name": "batch_update",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        2280
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"app_token\": \"GfbhbWshba8es4s8wQQuq65hspe\",\n  \"tbl_id_order\": \"tblaDDCyz7suvc4N\",\n  \"app_id\": \"cli_a7d906aee8b85003\",\n  \"app_secret\": \"VJG6X5ujpc968CDuhupGVfLVnpYy6MXk\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        180,
+        1680
+      ],
+      "id": "ceda4bb9-baf3-4047-b228-854deff22cdb",
+      "name": "config2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://open.larksuite.com/open-apis/auth/v3/app_access_token/internal",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "app_id",
+              "value": "={{ $('config2').item.json.app_id }}"
+            },
+            {
+              "name": "app_secret",
+              "value": "={{ $('config2').item.json.app_secret }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4f1c08d9-bcc0-4c01-9916-4b6ebef2cf8f",
+      "name": "get_token2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        1680
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        500,
+        2280
+      ],
+      "id": "8a374a56-2117-45a4-aefb-ec8d6b9a1649",
+      "name": "Respond to Webhook2"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vinci-update-status-v2-190325",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -680,
+        1800
+      ],
+      "id": "66e4de9d-2f41-45a9-b00b-4cc9a216256d",
+      "name": "webhook2",
+      "webhookId": "d760c381-d3e8-452e-9fcb-0b9ed930095a"
+    }
+  ],
+  "connections": {
+    "validate_batch_update": {
+      "main": [
+        [
+          {
+            "node": "config2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_records": {
+      "main": [
+        [
+          {
+            "node": "prepare_batch_update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare_batch_update": {
+      "main": [
+        [
+          {
+            "node": "batch_update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "batch_update": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "config2": {
+      "main": [
+        [
+          {
+            "node": "get_token2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_token2": {
+      "main": [
+        [
+          {
+            "node": "search_records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "webhook2": {
+      "main": [
+        [
+          {
+            "node": "validate_batch_update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "72772cf3c58b59e9ac72d29a80ced4971a607d65d6c65151558d2380343c007b"
+  }
+}

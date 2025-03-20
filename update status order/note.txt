@@ -1,0 +1,238 @@
+[
+  {
+    "code": 0,
+    "data": {
+      "has_more": false,
+      "items": [
+        {
+          "fields": {
+            order_code": {
+              "type": 1,
+              "value": [
+                {
+                  "text": "DH517",
+                  "type": "text"
+                }
+              ]
+            },
+          },
+          "record_id": "recuEm77GzbLQD"
+        }
+      ],
+      "total": 1
+    },
+    "msg": "success"
+  },
+  {
+    "code": 0,
+    "data": {
+      "has_more": false,
+      "items": [
+        {
+          "fields": {
+                        "order_code": {
+              "type": 1,
+              "value": [
+                {
+                  "text": "DH516",
+                  "type": "text"
+                }
+              ]
+            },
+          },
+          "record_id": "recuEmi44tuWma"
+        }
+      ],
+      "total": 1
+    },
+    "msg": "success"
+  }
+]
+
+output của node webhook2
+body
+
+
+"body": 
+{
+"orders": 
+[
+{
+"order_code": 
+"DH517",
+"status": 
+"Xuất kho"
+},
+{
+"order_code": 
+"DH518",
+"status": 
+"Xuất kho"
+}
+]
+},
+
+
+
+đây là output ra hiện tại
+
+[
+  {
+    "success": false,
+    "message": "Không tìm thấy records phù hợp để cập nhật",
+    "data": {
+      "records": [],
+      "status_changes": [],
+      "order_code_map": {
+        "DH517": {
+          "record_id": "recuEm77GzbLQD",
+          "current_status": "Hủy đơn"
+        },
+        "DH518": {
+          "record_id": "recuEmi44tuWma",
+          "current_status": "Hủy đơn"
+        }
+      }
+    },
+    "stats": {
+      "total": 0,
+      "matched": 0,
+      "unmatched": 0
+    },
+    "errors": []
+  }
+]
+
+xem xét và sửa lại xem cách lấy data của webhook đã chuẩn chưa
+và nhớ mapping theo order_code sang
+tham khảo code cũ này
+
+/**
+ * Prepare Batch Update
+ * --------------------------------
+ * Chuẩn bị dữ liệu cho việc cập nhật hàng loạt trạng thái đơn hàng
+ *
+ * Input: Object chứa old_data (dữ liệu hiện tại) và new_data (dữ liệu cập nhật)
+ * Output: Object chứa dữ liệu đã được định dạng để cập nhật vào Larkbase
+ */
+
+function handler(input) {
+  const response = {
+    success: true,
+    message: 'Dữ liệu đã được chuẩn bị thành công',
+    data: {
+      records: [],
+    },
+    errors: [],
+    stats: {
+      total: 0,
+      matched: 0,
+      unmatched: 0,
+    },
+  };
+
+  try {
+    // Kiểm tra cấu trúc input
+    if (!input || !input.old_data || !input.new_data) {
+      response.success = false;
+      response.message = 'Dữ liệu đầu vào không hợp lệ';
+      response.errors.push('Thiếu old_data hoặc new_data');
+      return response;
+    }
+
+    if (!Array.isArray(input.old_data) || !Array.isArray(input.new_data)) {
+      response.success = false;
+      response.message = 'old_data và new_data phải là mảng';
+      response.errors.push('Định dạng dữ liệu không hợp lệ');
+      return response;
+    }
+
+    // Tạo map từ old_data để dễ dàng tìm kiếm theo order_code
+    const oldDataMap = new Map();
+
+    input.old_data.forEach((record) => {
+      // Trích xuất order_code từ cấu trúc phức tạp
+      let orderCode = null;
+
+      if (record.fields && record.fields.order_code) {
+        const orderCodeField = record.fields.order_code;
+
+        if (
+          orderCodeField.type === 1 &&
+          Array.isArray(orderCodeField.value) &&
+          orderCodeField.value.length > 0 &&
+          orderCodeField.value[0].text
+        ) {
+          orderCode = orderCodeField.value[0].text;
+        }
+      }
+
+      if (orderCode) {
+        oldDataMap.set(orderCode, {
+          record_id: record.record_id,
+          current_status: record.fields['Trạng thái đơn'] || null,
+        });
+      }
+    });
+
+    // Thống kê
+    response.stats.total = input.new_data.length;
+
+    // Xử lý từng record trong new_data
+    input.new_data.forEach((newRecord) => {
+      const orderCode = newRecord.order_code;
+      const newStatus = newRecord.status;
+
+      // Tìm record tương ứng trong old_data
+      if (oldDataMap.has(orderCode)) {
+        const oldRecord = oldDataMap.get(orderCode);
+
+        // Tạo record để cập nhật
+        const updateRecord = {
+          record_id: oldRecord.record_id,
+          fields: {
+            'Trạng thái đơn': newStatus,
+          },
+        };
+
+        // Thêm vào danh sách records cần cập nhật
+        response.data.records.push(updateRecord);
+        response.stats.matched++;
+
+        // Ghi lại thông tin thay đổi trạng thái
+        if (oldRecord.current_status !== newStatus) {
+          if (!response.data.status_changes) {
+            response.data.status_changes = [];
+          }
+
+          response.data.status_changes.push({
+            order_code: orderCode,
+            record_id: oldRecord.record_id,
+            previous_status: oldRecord.current_status,
+            new_status: newStatus,
+          });
+        }
+      } else {
+        // Không tìm thấy record tương ứng
+        response.stats.unmatched++;
+        response.errors.push(`Không tìm thấy đơn hàng có mã: ${orderCode}`);
+      }
+    });
+
+    // Cập nhật thông báo dựa trên kết quả
+    if (response.stats.matched === 0) {
+      response.success = false;
+      response.message = 'Không tìm thấy đơn hàng nào để cập nhật';
+    } else if (response.stats.unmatched > 0) {
+      response.message = `Đã tìm thấy ${response.stats.matched}/${response.stats.total} đơn hàng để cập nhật`;
+    } else {
+      response.message = `Đã chuẩn bị cập nhật ${response.stats.matched} đơn hàng`;
+    }
+  } catch (error) {
+    response.success = false;
+    response.message = 'Lỗi xử lý dữ liệu';
+    response.errors.push(error.message);
+  }
+
+  return response;
+}
