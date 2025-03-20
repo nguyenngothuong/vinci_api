@@ -1,0 +1,7 @@
+# Thư mục làm việc
+update status order/
+
+# Các file tạm
+.DS_Store
+.env
+node_modules/ 
