@@ -74,6 +74,7 @@
       "order_details": [
         {
           "product_id": "recmVEazL4",
+          "product_code": "1001",
           "product_name": "Dán Kidmac S",
           "size": "S",
           "category": "Tã dán",
@@ -122,6 +123,7 @@
 
 ### Thông tin chi tiết đơn hàng (order_details)
 - **product_id**: ID sản phẩm
+- **product_code**: Mã sản phẩm dạng số tăng dần (dùng cho upsert)
 - **product_name**: Tên sản phẩm
 - **size**: Kích thước sản phẩm
 - **category**: Danh mục sản phẩm
@@ -247,4 +249,5 @@ print(json.dumps(response.json(), indent=2, ensure_ascii=False))
 3. Dữ liệu trả về đã được xử lý và làm sạch, không cần phân trang
 4. Các trường dữ liệu có thể thay đổi tùy theo cấu hình hệ thống
 5. Khi làm việc với trường ngày tháng, sử dụng timestamp dạng milliseconds (Unix epoch time)
-6. Trường export_document_link có thể null nếu đơn hàng chưa có phiếu xuất kho 
+6. Trường export_document_link có thể null nếu đơn hàng chưa có phiếu xuất kho
+7. Trường product_code là mã số dạng text tăng dần, rất hữu ích cho việc upsert sản phẩm 
