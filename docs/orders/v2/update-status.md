@@ -5,7 +5,7 @@ API này cho phép cập nhật trạng thái của nhiều đơn hàng cùng m�
 ## Endpoint
 
 ```
-POST https://open.larksuite.com/anycross/trigger/callback/d760c381-d3e8-452e-9fcb-0b9ed930095a
+POST https://n8n.nguyenngothuong.com/webhook/vinci-update-status-v2-190325
 ```
 
 ## Xác thực

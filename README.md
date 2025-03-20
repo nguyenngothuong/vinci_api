@@ -14,8 +14,8 @@ Tài liệu API cho hệ thống Vinci.
 - Phương thức: POST
 - Xác thực: Basic Authentication (username/password khác nhau giữa các phiên bản)
 - Base URL:
-  - **V1**: `https://open.larksuite.com/anycross/trigger/callback/[ENDPOINT_ID_V1]`
-  - **V2**: `https://open.larksuite.com/anycross/trigger/callback/[ENDPOINT_ID_V2]`
+  - **V1**: `https://n8n.nguyenngothuong.com/webhook/[ENDPOINT_ID_V1]`
+  - **V2**: `https://n8n.nguyenngothuong.com/webhook/vinci-update-status-v2-190325`
 
 ## Các phiên bản API
 
