@@ -11,9 +11,11 @@ Tài liệu API cho hệ thống Vinci.
 
 ## Thông tin chung
 
-- Base URL: `https://open.larksuite.com/anycross/trigger/callback/[ENDPOINT_ID]`
 - Phương thức: POST
-- Xác thực: Basic Authentication
+- Xác thực: Basic Authentication (username/password khác nhau giữa các phiên bản)
+- Base URL:
+  - **V1**: `https://open.larksuite.com/anycross/trigger/callback/[ENDPOINT_ID_V1]`
+  - **V2**: `https://open.larksuite.com/anycross/trigger/callback/[ENDPOINT_ID_V2]`
 
 ## Các phiên bản API
 
@@ -22,11 +24,15 @@ Tài liệu API cho hệ thống Vinci.
 - Trả về toàn bộ dữ liệu trong một lần gọi
 - Không cần phân trang
 - Hỗ trợ cập nhật trạng thái đơn hàng hàng loạt
+- Endpoint và tài khoản xác thực riêng biệt, không tương thích với V1
 
 ### V1
 - API đơn hàng và chi tiết đơn hàng riêng biệt
 - Hỗ trợ phân trang
 - Cần gọi nhiều lần để lấy đầy đủ dữ liệu
+- Sử dụng endpoint và tài khoản xác thực khác với V2
+
+> **Lưu ý quan trọng**: Khi chuyển từ V1 sang V2, cần cập nhật cả endpoint và thông tin xác thực (username/password)
 
 ## Thông báo quan trọng
 
