@@ -8,6 +8,7 @@ Tài liệu API cho hệ thống Vinci.
 - [API Cập Nhật Trạng Thái Đơn Hàng V2](./docs/orders/v2/update-status.md)
 - [API Chi Tiết Đơn Hàng V1](./docs/orders/v1/order-details.md)
 - [API Đơn Hàng V1](./docs/orders/v1/orders.md)
+(có api sản phẩm, vào folder docs check nhé, lười update readme quá)
 
 ## Thông tin chung
 
